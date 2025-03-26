@@ -18,12 +18,12 @@ contract MockERC721 is IMockERC721 {
         require(_owners[tokenId] != address(0), "Token does not exist");
         delete _owners[tokenId];
     }
-     function approve(address to, uint256 tokenId) public override {
+     function approve(address to, uint256 tokenId) public {
         require(_owners[tokenId] == msg.sender, "Not token owner");
         _tokenApprovals[tokenId] = to;
     }
 
-    function getApproved(uint256 tokenId) public view override returns (address) {
+    function getApproved(uint256 tokenId) public view returns (address) {
         return _tokenApprovals[tokenId];
     }
     function transferFrom(address from, address to, uint256 tokenId) external override {

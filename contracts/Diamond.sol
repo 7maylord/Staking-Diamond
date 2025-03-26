@@ -14,7 +14,7 @@ import {DiamondCutFacet} from "./facets/DiamondCutFacet.sol";
 import {DiamondLoupeFacet} from "./facets/DiamondLoupeFacet.sol";
 import {OwnershipFacet} from "./facets/OwnershipFacet.sol";
 import {ERC20Facet} from "./facets/ERC20Facet.sol";
-
+import {StakingFacet} from "./facets/StakingFacet.sol";
 
 contract Diamond {
     constructor(address _contractOwner, address _diamondCutFacet, string memory _tokenName, string memory _tokenSymbol) payable {
@@ -51,11 +51,36 @@ contract Diamond {
         });
         LibDiamond.diamondCut(cut, address(0), "");
 
+        // Deploy and attach StakingFacet
+        StakingFacet stakingFacet = new StakingFacet();
+        functionSelectors = new bytes4[](9);
+        functionSelectors[0] = StakingFacet.stakeERC20.selector;
+        functionSelectors[1] = StakingFacet.unstakeERC20.selector;
+        functionSelectors[2] = StakingFacet.stakeERC721.selector;
+        functionSelectors[3] = StakingFacet.unstakeERC721.selector;
+        functionSelectors[4] = StakingFacet.stakeERC1155.selector;
+        functionSelectors[5] = StakingFacet.unstakeERC1155.selector;
+        functionSelectors[6] = StakingFacet.getStakeERC20.selector;
+        functionSelectors[7] = StakingFacet.getStakeERC721.selector;
+        functionSelectors[8] = StakingFacet.getStakeERC1155.selector;
+        cut[0] = IDiamondCut.FacetCut({
+            facetAddress: address(stakingFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: functionSelectors
+        });
+        LibDiamond.diamondCut(cut, address(0), "");
+
         // Initialize ERC20 token
         (bool success, ) = address(this).call(
             abi.encodeWithSelector(ERC20Facet.initializeERC20.selector, _tokenName, _tokenSymbol)
         );
         require(success, "ERC20 initialization failed");
+
+        // Initialize reward config
+        (success, ) = address(this).call(
+            abi.encodeWithSelector(StakingFacet.initializeRewardConfig.selector)
+        );
+        require(success, "Reward config initialization failed");
     }
 
     // Find facet for function that is called and execute the

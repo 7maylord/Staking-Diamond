@@ -4,7 +4,10 @@ import "./MockInterfaces.sol";
 
 contract MockERC1155 is IMockERC1155 {
     mapping(address => mapping(uint256 => uint256)) private _balances;
+     mapping(address => mapping(address => bool)) private _operatorApprovals;
 
+    
+    event ApprovalForAll(address indexed account, address indexed operator, bool approved);
     function mint(address to, uint256 id, uint256 amount, bytes memory) external override {
         _balances[to][id] += amount;
     }
@@ -23,6 +26,15 @@ contract MockERC1155 is IMockERC1155 {
     function balanceOf(address account, uint256 id) external view override returns (uint256) {
         return _balances[account][id];
     }
+    function setApprovalForAll(address operator, bool approved) public {
+        _operatorApprovals[msg.sender][operator] = approved;
+        emit ApprovalForAll(msg.sender, operator, approved);
+    }
+
+    function isApprovedForAll(address account, address operator) public view returns (bool) {
+        return _operatorApprovals[account][operator];
+    }
+
 }
 
 

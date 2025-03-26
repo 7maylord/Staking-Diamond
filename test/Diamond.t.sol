@@ -15,8 +15,6 @@ import "./mocks/MockERC1155.sol";
 
 contract DiamondTest is Test {
     Diamond public diamond;
-    StakingFacet public stakingFacet;
-    ERC20Facet public erc20Facet;
     MockERC20 public mockERC20;
     MockERC721 public mockERC721;
     MockERC1155 public mockERC1155;
@@ -45,6 +43,27 @@ contract DiamondTest is Test {
             "RWD"
         );
 
+        // Add StakingFacet to Diamond
+        _addStakingFacet();
+
+        // Initialize reward configuration
+        (bool success, ) = address(diamond).call(
+            abi.encodeWithSelector(
+                StakingFacet.initializeRewardConfig.selector
+            )
+        );
+        require(success, "Reward config initialization failed");
+
+        // Mint reward tokens to Diamond contract for distribution
+        (success, ) = address(diamond).call(
+            abi.encodeWithSelector(
+                ERC20Facet.mint.selector,
+                address(diamond),
+                1_000_000 ether
+            )
+        );
+        require(success, "Reward token minting failed");
+
         // Prepare minting tokens to users
         mockERC20.mint(user1, 1000 ether);
         mockERC721.mint(user1, 1);
@@ -52,6 +71,43 @@ contract DiamondTest is Test {
 
         vm.stopPrank();
     }
+
+    function _addStakingFacet() private {
+        vm.startPrank(owner);
+        
+        // Deploy and attach StakingFacet
+        StakingFacet stakingFacet = new StakingFacet();
+        bytes4[] memory functionSelectors = new bytes4[](9);
+        functionSelectors[0] = StakingFacet.stakeERC20.selector;
+        functionSelectors[1] = StakingFacet.unstakeERC20.selector;
+        functionSelectors[2] = StakingFacet.stakeERC721.selector;
+        functionSelectors[3] = StakingFacet.unstakeERC721.selector;
+        functionSelectors[4] = StakingFacet.stakeERC1155.selector;
+        functionSelectors[5] = StakingFacet.unstakeERC1155.selector;
+        functionSelectors[6] = StakingFacet.getStakeERC20.selector;
+        functionSelectors[7] = StakingFacet.getStakeERC721.selector;
+        functionSelectors[8] = StakingFacet.getStakeERC1155.selector;
+
+        IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
+        cut[0] = IDiamondCut.FacetCut({
+            facetAddress: address(stakingFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: functionSelectors
+        });
+        
+        (bool success, ) = address(diamond).call(
+            abi.encodeWithSelector(
+                IDiamondCut.diamondCut.selector,
+                cut,
+                address(0),
+                ""
+            )
+        );
+        require(success, "Adding StakingFacet failed");
+        
+        vm.stopPrank();
+    }
+
 
     // ERC20 Staking Tests
     function testStakeERC20() public {
