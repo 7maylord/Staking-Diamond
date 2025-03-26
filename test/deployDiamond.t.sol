@@ -16,10 +16,13 @@ contract DiamondDeployer is DiamondUtils, IDiamondCut {
     DiamondLoupeFacet dLoupe;
     OwnershipFacet ownerF;
 
+    string private _tokenName = "Staking Token";
+    string private _tokenSymbol = "STN";
+
     function testDeployDiamond() public {
         //deploy facets
         dCutFacet = new DiamondCutFacet();
-        diamond = new Diamond(address(this), address(dCutFacet));
+        diamond = new Diamond(address(this), address(dCutFacet), _tokenName, _tokenSymbol);
         dLoupe = new DiamondLoupeFacet();
         ownerF = new OwnershipFacet();
 
