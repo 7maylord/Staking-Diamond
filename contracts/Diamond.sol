@@ -10,9 +10,14 @@ pragma solidity ^0.8.0;
 
 import {LibDiamond} from "./libraries/LibDiamond.sol";
 import {IDiamondCut} from "./interfaces/IDiamondCut.sol";
+import {DiamondCutFacet} from "./facets/DiamondCutFacet.sol";
+import {DiamondLoupeFacet} from "./facets/DiamondLoupeFacet.sol";
+import {OwnershipFacet} from "./facets/OwnershipFacet.sol";
+import {ERC20Facet} from "./facets/ERC20Facet.sol";
+
 
 contract Diamond {
-    constructor(address _contractOwner, address _diamondCutFacet) payable {
+    constructor(address _contractOwner, address _diamondCutFacet, string memory _tokenName, string memory _tokenSymbol) payable {
         LibDiamond.setContractOwner(_contractOwner);
 
         // Add the diamondCut external function from the diamondCutFacet
@@ -25,6 +30,32 @@ contract Diamond {
             functionSelectors: functionSelectors
         });
         LibDiamond.diamondCut(cut, address(0), "");
+
+        // Deploy and attach ERC20Facet (reward token)
+        ERC20Facet erc20Facet = new ERC20Facet();
+        functionSelectors = new bytes4[](10);
+        functionSelectors[0] = ERC20Facet.totalSupply.selector;
+        functionSelectors[1] = ERC20Facet.balanceOf.selector;
+        functionSelectors[2] = ERC20Facet.transfer.selector;
+        functionSelectors[3] = ERC20Facet.allowance.selector;
+        functionSelectors[4] = ERC20Facet.approve.selector;
+        functionSelectors[5] = ERC20Facet.transferFrom.selector;
+        functionSelectors[6] = ERC20Facet.name.selector;
+        functionSelectors[7] = ERC20Facet.symbol.selector;
+        functionSelectors[8] = ERC20Facet.decimals.selector;
+        functionSelectors[9] = ERC20Facet.mint.selector;
+        cut[0] = IDiamondCut.FacetCut({
+            facetAddress: address(erc20Facet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: functionSelectors
+        });
+        LibDiamond.diamondCut(cut, address(0), "");
+
+        // Initialize ERC20 token
+        (bool success, ) = address(this).call(
+            abi.encodeWithSelector(ERC20Facet.initializeERC20.selector, _tokenName, _tokenSymbol)
+        );
+        require(success, "ERC20 initialization failed");
     }
 
     // Find facet for function that is called and execute the
@@ -59,9 +90,9 @@ contract Diamond {
     }
 
     //immutable function example
-    function example() public pure returns (string memory) {
-        return "THIS IS AN EXAMPLE OF AN IMMUTABLE FUNCTION";
-    }
+    // function example() public pure returns (string memory) {
+    //     return "THIS IS AN EXAMPLE OF AN IMMUTABLE FUNCTION";
+    // }
 
     receive() external payable {}
 }
