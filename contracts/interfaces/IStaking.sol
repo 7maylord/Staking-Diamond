@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 interface IStaking {
     struct Stake {
@@ -28,11 +28,11 @@ interface IStaking {
     function unstakeERC721(address token, uint256 stakeId) external;
     function stakeERC1155(address token, uint256 tokenId, uint256 amount) external;
     function unstakeERC1155(address token, uint256 stakeId) external;
-    function claimRewards() external;
+    // function claimRewards() external;
     
     function getStakeERC20(address user, address token, uint256 stakeId) external view returns (Stake memory);
     function getStakeERC721(address user, address token, uint256 stakeId) external view returns (Stake memory);
     function getStakeERC1155(address user, address token, uint256 stakeId) external view returns (Stake memory);
-    function calculateRewards(address user) external view returns (uint256);
-    function getRewardConfig() external view returns (RewardConfig memory);
+    // function calculateRewards(address user) external view returns (uint256);
+    // function getRewardConfig() external view returns (RewardConfig memory);
 }

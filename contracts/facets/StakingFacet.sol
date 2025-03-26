@@ -1,170 +1,220 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import "../interfaces/IStaking.sol";
 import "../interfaces/IERC20.sol";
 import "../interfaces/IERC721.sol";
 import "../interfaces/IERC1155.sol";
-import "../libraries/LibStaking.sol";
-import "../libraries/LibRewards.sol";
+import "../libraries/LibAppStorage.sol";
+import "../libraries/LibDiamond.sol";
 
 contract StakingFacet is IStaking {
+    function initializeRewardConfig() external {
+        LibDiamond.enforceIsContractOwner();
+        LibAppStorage.initializeRewardConfig();
+    }
 
-    // ERC20 staking function using interface
     function stakeERC20(address token, uint256 amount) external override {
-        LibStaking.StakingStorage storage ss = LibStaking.stakingStorage();
-        IStaking.RewardConfig storage config = LibStaking.rewardConfig();
+        AppStorage storage s = LibAppStorage.appStorage();
+        IStaking.RewardConfig storage config = s.rewardConfig;
         
         require(amount > 0, "Amount must be greater than 0");
-        require(ss.totalStaked[token] + amount <= config.maxTotalStake, "Max total stake exceeded");
-        require(IERC20(token).allowance(msg.sender, address(this)) >= amount, "Insufficient allowance");
-
+        require(s.totalStakedPerToken[token] + amount <= config.maxTotalStake, "Max total stake exceeded");
         
-        uint256 stakeId = ss.erc20StakeCounts[msg.sender][token]++;
+        uint256 stakeId = s.erc20StakeCounts[msg.sender][token]++;
         
-        ss.erc20Stakes[msg.sender][token][stakeId] = Stake({
+        s.erc20Stakes[msg.sender][token][stakeId] = Stake({
             amount: amount,
             startTime: block.timestamp,
             staker: msg.sender,
             lastClaimTime: block.timestamp
         });
         
-        ss.totalStaked[token] += amount;
+        s.totalStakedPerToken[token] += amount;
         config.totalStaked += amount;
-
+        
         IERC20(token).transferFrom(msg.sender, address(this), amount);
         emit Staked(msg.sender, token, 0, amount, stakeId);
     }
 
     function unstakeERC20(address token, uint256 stakeId) external override {
-        LibStaking.StakingStorage storage ss = LibStaking.stakingStorage();
-        IStaking.RewardConfig storage config = LibStaking.rewardConfig();
+        AppStorage storage s = LibAppStorage.appStorage();
+        IStaking.RewardConfig storage config = s.rewardConfig;
         
-        Stake storage stake = ss.erc20Stakes[msg.sender][token][stakeId];
+        Stake storage stake = s.erc20Stakes[msg.sender][token][stakeId];
         require(stake.amount > 0, "No stake found");
         require(stake.staker == msg.sender, "Not the staker");
         require(block.timestamp - stake.startTime >= config.minStakeDuration, "Stake not mature");
-        
-        // Claim rewards first
-        (bool success, ) = address(this).call(
-            abi.encodeWithSignature("claimRewards()")
-        );
-        require(success, "Claim failed");
 
+        // 1. FIRST CLAIM REWARDS
+        _claimRewards(msg.sender, token, stakeId, 0); // 0 for ERC20
+
+        // 2. THEN PROCESS UNSTAKE
         uint256 amount = stake.amount;
-        delete ss.erc20Stakes[msg.sender][token][stakeId];
-
-        ss.totalStakedPerToken[token] -= amount;
+        s.totalStakedPerToken[token] -= amount;
         config.totalStaked -= amount;
-                
+        delete s.erc20Stakes[msg.sender][token][stakeId];
+        
         IERC20(token).transfer(msg.sender, amount);
         emit Unstaked(msg.sender, token, 0, amount, stakeId);
     }
 
-    // ERC721 staking function using interface
     function stakeERC721(address token, uint256 tokenId) external override {
-        LibStaking.StakingStorage storage ss = LibStaking.stakingStorage();
-        uint256 stakeId = ss.erc721StakeCounts[msg.sender][token]++;
+        AppStorage storage s = LibAppStorage.appStorage();
+        IStaking.RewardConfig storage config = s.rewardConfig;
+        uint256 stakeId = s.erc721StakeCounts[msg.sender][token]++;
         
-        ss.erc721Stakes[msg.sender][token][stakeId] = Stake({
-            amount: 1,
+        s.erc721Stakes[msg.sender][token][stakeId] = Stake({
+            amount: 1, // Fixed value for ERC721
             startTime: block.timestamp,
             staker: msg.sender,
             lastClaimTime: block.timestamp
         });
 
-        ss.totalStaked[token] += amount;
-        config.totalStaked += amount;
+        s.totalStakedPerToken[token] += 1;
+        config.totalStaked += 1;
         
         IERC721(token).transferFrom(msg.sender, address(this), tokenId);
         emit Staked(msg.sender, token, tokenId, 1, stakeId);
     }
 
     function unstakeERC721(address token, uint256 stakeId) external override {
-        LibStaking.StakingStorage storage ss = LibStaking.stakingStorage();
-        IStaking.RewardConfig storage config = LibStaking.rewardConfig();
+        AppStorage storage s = LibAppStorage.appStorage();
+        IStaking.RewardConfig storage config = s.rewardConfig;
 
-        Stake storage stake = ss.erc721Stakes[msg.sender][token][stakeId];
+        Stake storage stake = s.erc721Stakes[msg.sender][token][stakeId];
         
         require(stake.amount > 0, "No stake found");
         require(stake.staker == msg.sender, "Not the staker");
         require(block.timestamp - stake.startTime >= config.minStakeDuration, "Stake not mature");
         
-         // Claim rewards first
-        (bool success, ) = address(this).call(
-            abi.encodeWithSignature("claimRewards()")
-        );
-        require(success, "Claim failed");
+        // Claim rewards first
+        _claimRewards(msg.sender, token, stakeId, 1); // 1 for ERC721
 
-        uint256 amount = stake.amount;
-        ss.totalStakedPerToken[token] -= amount;
-        config.totalStaked -= amount;
+        s.totalStakedPerToken[token] -= 1;
+        config.totalStaked -= 1;
         
-        delete ss.erc721Stakes[msg.sender][token][stakeId];
-        IERC721(token).safeTransferFrom(address(this), msg.sender, tokenId);
+        delete s.erc721Stakes[msg.sender][token][stakeId];
+        IERC721(token).safeTransferFrom(address(this), msg.sender, stakeId);
         
-        emit Unstaked(msg.sender, token, tokenId, 1, stakeId);
+        emit Unstaked(msg.sender, token, stakeId, 1, stakeId);
     }
 
-    // ERC1155 staking function using interface
     function stakeERC1155(address token, uint256 tokenId, uint256 amount) external override {
-        LibStaking.StakingStorage storage ss = LibStaking.stakingStorage();
-        IStaking.RewardConfig memory config = LibStaking.rewardConfig();
+        AppStorage storage s = LibAppStorage.appStorage();
+        IStaking.RewardConfig storage config = s.rewardConfig;
         
         require(amount > 0, "Amount must be greater than 0");
-        require(ss.totalStaked[token] + amount <= config.maxTotalStake, "Max total stake exceeded");
+        require(s.totalStakedPerToken[token] + amount <= config.maxTotalStake, "Max total stake exceeded");
         
-        uint256 stakeId = ss.erc1155StakeCounts[msg.sender][token]++;
+        uint256 stakeId = s.erc1155StakeCounts[msg.sender][token]++;
         
-        ss.erc1155Stakes[msg.sender][token][stakeId] = Stake({
+        s.erc1155Stakes[msg.sender][token][stakeId] = Stake({
             amount: amount,
             startTime: block.timestamp,
             staker: msg.sender,
             lastClaimTime: block.timestamp
         });
         
-        ss.totalStaked[token] += amount;
+        s.totalStakedPerToken[token] += amount;
         config.totalStaked += amount;
-
+        
         IERC1155(token).safeTransferFrom(msg.sender, address(this), tokenId, amount, "");
         emit Staked(msg.sender, token, tokenId, amount, stakeId);
     }
 
     function unstakeERC1155(address token, uint256 stakeId) external override {
-        LibStaking.StakingStorage storage ss = LibStaking.stakingStorage();
-        IStaking.RewardConfig storage config = LibStaking.rewardConfig();
-        Stake storage stake = ss.erc1155Stakes[msg.sender][token][stakeId];
+        AppStorage storage s = LibAppStorage.appStorage();
+        IStaking.RewardConfig storage config = s.rewardConfig;
+
+        Stake storage stake = s.erc1155Stakes[msg.sender][token][stakeId];
         
         require(stake.amount > 0, "No stake found");
         require(stake.staker == msg.sender, "Not the staker");
         require(block.timestamp - stake.startTime >= config.minStakeDuration, "Stake not mature");
 
         // Claim rewards first
-        (bool success, ) = address(this).call(
-            abi.encodeWithSignature("claimRewards()")
-        );
-        require(success, "Claim failed");
+        _claimRewards(msg.sender, token, stakeId, 2); // 2 for ERC1155
 
         uint256 amount = stake.amount;
-        ss.totalStakedPerToken[token] -= amount;
+        s.totalStakedPerToken[token] -= amount;
         config.totalStaked -= amount;
         
-        delete ss.erc1155Stakes[msg.sender][token][stakeId];
-        IERC1155(token).safeTransferFrom(address(this), msg.sender, tokenId, amount, "");
+        delete s.erc1155Stakes[msg.sender][token][stakeId];
+        IERC1155(token).safeTransferFrom(address(this), msg.sender, stakeId, amount, "");
         
-        emit Unstaked(msg.sender, token, tokenId, amount, stakeId);
+        emit Unstaked(msg.sender, token, stakeId, amount, stakeId);
+    }
+
+    function _claimRewards(address user, address token, uint256 stakeId, uint256 tokenType) internal {
+        AppStorage storage s = LibAppStorage.appStorage();
+        Stake storage stake;
+        
+        if (tokenType == 0) {
+            stake = s.erc20Stakes[user][token][stakeId];
+        } else if (tokenType == 1) {
+            stake = s.erc721Stakes[user][token][stakeId];
+        } else {
+            stake = s.erc1155Stakes[user][token][stakeId];
+        }
+        
+        if (stake.amount == 0) return;
+
+        uint256 reward = _calculateReward(
+            stake.amount,
+            stake.startTime,
+            stake.lastClaimTime,
+            block.timestamp,
+            s.rewardConfig.baseAPR,
+            s.rewardConfig.maxStakeDuration,
+            s.rewardConfig.precisionFactor
+        );
+
+        if (reward > 0) {
+            s.balances[user] += reward;
+            s.totalSupply += reward;
+            stake.lastClaimTime = block.timestamp;
+            emit RewardClaimed(user, reward);
+        }
+    }
+
+    function _calculateReward(
+        uint256 amount,
+        uint256 startTime,
+        uint256 lastClaimTime,
+        uint256 currentTime,
+        uint256 baseAPR,
+        uint256 maxStakeDuration,
+        uint256 precisionFactor
+    ) internal pure returns (uint256) {
+        if (currentTime <= lastClaimTime) return 0;
+        
+        uint256 stakeDuration = currentTime - startTime;
+        uint256 claimDuration = currentTime - lastClaimTime;
+        
+        uint256 dynamicAPR = stakeDuration >= maxStakeDuration 
+            ? 0 
+            : baseAPR * (maxStakeDuration - stakeDuration) / maxStakeDuration;
+        
+        return (amount * dynamicAPR * claimDuration) / (365 days * precisionFactor);
     }
 
     // View Functions
-    function getStakeERC20(address user, address token, uint256 stakeId) external view override returns (Stake memory) {
-        return LibStaking.stakingStorage().erc20Stakes[user][token][stakeId];
+    function getStakeERC20(address user, address token, uint256 stakeId) 
+        external view override returns (Stake memory) 
+    {
+        return LibAppStorage.appStorage().erc20Stakes[user][token][stakeId];
+    }
+    
+    function getStakeERC721(address user, address token, uint256 stakeId) 
+        external view override returns (Stake memory) 
+    {
+        return LibAppStorage.appStorage().erc721Stakes[user][token][stakeId];
     }
 
-    function getStakeERC721(address user, address token, uint256 stakeId) external view override returns (Stake memory) {
-        return LibStaking.stakingStorage().erc721Stakes[user][token][stakeId];
-    }
-
-    function getStakeERC1155(address user, address token, uint256 stakeId) external view override returns (Stake memory) {
-        return LibStaking.stakingStorage().erc1155Stakes[user][token][stakeId];
+    function getStakeERC1155(address user, address token, uint256 stakeId) 
+        external view override returns (Stake memory) 
+    {
+        return LibAppStorage.appStorage().erc1155Stakes[user][token][stakeId];
     }
 }
