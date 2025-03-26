@@ -13,6 +13,8 @@ interface IMockERC20 {
 interface IMockERC721 {
     function mint(address to, uint256 tokenId) external;
     function burn(uint256 tokenId) external;
+    function approve(address to, uint256 tokenId) external;
+    function getApproved(uint256 tokenId) external view returns (address);
     function transferFrom(address from, address to, uint256 tokenId) external;
     function ownerOf(uint256 tokenId) external view returns (address);
 }

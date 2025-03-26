@@ -13,7 +13,7 @@ import "./mocks/MockERC721.sol";
 import "./mocks/MockERC1155.sol";
 
 
-contract StakingFacetTest is Test {
+contract DiamondTest is Test {
     Diamond public diamond;
     StakingFacet public stakingFacet;
     ERC20Facet public erc20Facet;
