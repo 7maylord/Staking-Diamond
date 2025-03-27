@@ -50,6 +50,10 @@ contract DiamondTest is Test {
         mockERC721.mint(user1, 1);
         mockERC1155.mint(user1, 1, 100, "");
 
+        console.log("Max Total Stake:", s.rewardConfig.maxTotalStake);
+        console.log("Base APR:", s.rewardConfig.baseAPR);
+        console.log("Max Stake Duration:", s.rewardConfig.maxStakeDuration);
+
         vm.stopPrank();
     }
 

@@ -41,7 +41,7 @@ library LibAppStorage {
         s.rewardConfig.baseAPR = 20_000; // 20%
         s.rewardConfig.maxStakeDuration = 365 days;
         s.rewardConfig.minStakeDuration = 7 days;
-        s.rewardConfig.maxTotalStake = 1_000_000 * 10**18;
+        s.rewardConfig.maxTotalStake = 1_000_000_000 * 10**18;
         s.rewardConfig.precisionFactor = 100_000;
     }
 }

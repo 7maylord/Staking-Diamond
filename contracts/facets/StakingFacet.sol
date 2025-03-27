@@ -187,7 +187,9 @@ contract StakingFacet is IStaking {
         uint256 maxStakeDuration,
         uint256 precisionFactor
     ) internal pure returns (uint256) {
-        if (currentTime <= lastClaimTime) return 0;
+        if (currentTime <= lastClaimTime || precisionFactor == 0 || maxStakeDuration == 0) {
+        return 0;
+    }
         
         uint256 stakeDuration = currentTime - startTime;
         uint256 claimDuration = currentTime - lastClaimTime;

@@ -13,7 +13,7 @@ interface IStaking {
         uint256 baseAPR; // 20% = 20_000 (using 3 decimal precision)
         uint256 maxStakeDuration; // in seconds
         uint256 minStakeDuration; // 7 days in seconds
-        uint256 maxTotalStake; // 1,000,000 tokens
+        uint256 maxTotalStake; // 1,000,000,000 tokens
         uint256 precisionFactor; // 100_000 for 3 decimal places
         uint256 totalStaked; // Track total staked across all tokens
     }
