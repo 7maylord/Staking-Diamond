@@ -115,6 +115,7 @@ contract Diamond {
     }
 
     //immutable function example
+    // CHeck for
     // function example() public pure returns (string memory) {
     //     return "THIS IS AN EXAMPLE OF AN IMMUTABLE FUNCTION";
     // }
